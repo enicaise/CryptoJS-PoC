@@ -169,8 +169,8 @@ function selectRecord(id) {
 
 /* ── Render detail pane ─────────────────────────────────────────────────── */
 function renderDetail(r) {
-  const symKeyB64  = extractBase64(r.encrypted_sym_key) || '';
-  const secretB64  = extractBase64(r.encrypted_secret)  || '';
+  const symKeyB64  = r.encrypted_sym_key; // raw base64 (no wrapper)
+  const secretB64  = extractBase64(r.encrypted_secret) || '';
 
   document.getElementById('detail-pane').innerHTML = `
     <div class="card">
@@ -192,8 +192,8 @@ function renderDetail(r) {
       <hr class="divider"/>
       <div class="card-title">🗝️ Encrypted Symmetric Key (for Party B)</div>
       <div class="form-group">
-        <div class="enc-value"><span class="enc-label">%*ENCRYPTED*%</span><span style="color:var(--enc-text);">(${symKeyB64.substring(0,48)}…)</span></div>
-        <div class="enc-hint">RSA-4096-OAEP AES-256 key — only Party B's private key can unwrap this</div>
+        <div class="enc-value" style="color:var(--enc-text);">${symKeyB64.substring(0,64)}…</div>
+        <div class="enc-hint">RSA-4096-OAEP base64 — AES-256 key sealed for Party B's private key</div>
       </div>
 
       <div class="card-title" style="margin-top:1rem;">🔒 Encrypted Secret Text</div>
@@ -263,7 +263,7 @@ async function decryptRecord(id) {
 
     decStatus('Unwrapping AES-256 key with Party B RSA-4096 private key…', 'loading');
     await new Promise(r => setTimeout(r, 30));
-    const encAesB64   = extractBase64(records.find(x => x.id === id).encrypted_sym_key);
+    const encAesB64   = records.find(x => x.id === id).encrypted_sym_key; // raw base64
     const encAesBytes = forge.util.decode64(encAesB64);
     const aesKeyRaw   = privateKeyB.decrypt(encAesBytes, 'RSA-OAEP', {
       md:   forge.md.sha256.create(),

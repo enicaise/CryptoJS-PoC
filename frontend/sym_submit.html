@@ -232,12 +232,11 @@ async function handleSubmit() {
     // 5. Re-seal AES key for Party B (RSA-OAEP)
     setStatus('Sealing AES key for Party B (RSA-4096-OAEP)…', 'loading');
     await new Promise(r => setTimeout(r, 30));
-    const encSymKeyB64 = rsaEncryptBytes(partyBPublicPem, aesKeyHex);
-    const encryptedSymKey = formatEncrypted(encSymKeyB64);
+    const encryptedSymKey = rsaEncryptBytes(partyBPublicPem, aesKeyHex); // raw base64, no wrapper
 
     // 6. Update preview
     document.getElementById('prev-symkey').innerHTML =
-      `<span class="enc-label">%*ENCRYPTED*%</span><span style="color:var(--enc-text);">(${encSymKeyB64.substring(0,40)}…)</span>`;
+      `<span style="color:var(--enc-text);">${encryptedSymKey.substring(0,48)}…</span>`;
     document.getElementById('prev-secret').innerHTML =
       `<span class="enc-label">%*ENCRYPTED*%</span><span style="color:var(--enc-text);">(${encSecretB64.substring(0,40)}…)</span>`;
 

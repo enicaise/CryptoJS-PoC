@@ -155,7 +155,16 @@ async fn create_asym_record(
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![id, body.serial, body.public_text, body.secret_text, now],
     ) {
-        Ok(_) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
+        Ok(_) => {
+            // Keep only the 10 most recent records
+            let _ = db.execute(
+                "DELETE FROM asym_records WHERE id NOT IN (
+                    SELECT id FROM asym_records ORDER BY created_at DESC LIMIT 10
+                )",
+                [],
+            );
+            (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response()
+        }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
@@ -219,7 +228,16 @@ async fn create_sym_record(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
         params![id, body.serial, body.public_text, body.encrypted_sym_key, body.encrypted_secret, now],
     ) {
-        Ok(_) => (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response(),
+        Ok(_) => {
+            // Keep only the 10 most recent records
+            let _ = db.execute(
+                "DELETE FROM sym_records WHERE id NOT IN (
+                    SELECT id FROM sym_records ORDER BY created_at DESC LIMIT 10
+                )",
+                [],
+            );
+            (StatusCode::CREATED, Json(serde_json::json!({ "id": id }))).into_response()
+        }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
     }
 }
