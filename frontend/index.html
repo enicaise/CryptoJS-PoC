@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CryptoJS PoC — Web Client Encryption Demo</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-brand" href="/"><span class="lock-icon">🔐</span> CryptoJS PoC</a>
+  <div class="nav-links">
+    <a class="nav-link active" href="/">Home</a>
+    <a class="nav-link" href="/asym_submit.html">Asym Submit</a>
+    <a class="nav-link" href="/asym_view.html">Asym View</a>
+    <a class="nav-link" href="/sym_submit.html">Sym Submit</a>
+    <a class="nav-link" href="/sym_view.html">Sym View</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="hero-title">Web Client Encryption</div>
+  <p class="hero-sub">
+    Proof of concept demonstrating RSA-4096 asymmetric and AES-256 symmetric
+    end-to-end encryption entirely in the browser using node-forge &amp; CryptoJS.
+  </p>
+  <span class="hero-warning">⚠️ Proof of Concept — Not for production use</span>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('about')">📖 About</button>
+    <button class="tab-btn" onclick="switchTab('asym')">🔑 Asymmetric (RSA-4096)</button>
+    <button class="tab-btn" onclick="switchTab('sym')">🔄 Symmetric (AES-256 / PGP-like)</button>
+  </div>
+
+  <!-- ── Tab 1: About ─────────────────────────────────────────────────── -->
+  <div id="tab-about" class="tab-panel active">
+    <div class="demo-grid">
+      <div class="demo-card">
+        <div class="demo-card-icon">🔑</div>
+        <div class="demo-card-title">Asymmetric Encryption</div>
+        <p class="demo-card-desc">
+          The client encrypts a "secret" field using the server's RSA-4096 public key
+          before submitting the form. The encrypted value is stored as
+          <code class="mono" style="color:var(--enc-label)">%*ENCRYPTED*%(base64…)</code>.
+          Only the server's private key (password-protected) can decrypt it.
+        </p>
+        <div class="demo-links">
+          <a class="btn btn-primary btn-sm" href="/asym_submit.html">Submit Form</a>
+          <a class="btn btn-ghost btn-sm" href="/asym_view.html">View &amp; Decrypt</a>
+        </div>
+      </div>
+
+      <div class="demo-card">
+        <div class="demo-card-icon">🔄</div>
+        <div class="demo-card-title">Symmetric (PGP-like)</div>
+        <p class="demo-card-desc">
+          Simulates PGP-style encryption. Party A retrieves a pre-shared AES-256 key
+          (delivered encrypted with their RSA public key), decrypts it with their
+          private key, encrypts the secret field, then re-seals the AES key under
+          Party B's RSA public key. Party B decrypts using their private key.
+        </p>
+        <div class="demo-links">
+          <a class="btn btn-secondary btn-sm" href="/sym_submit.html">Party A — Send</a>
+          <a class="btn btn-ghost btn-sm" href="/sym_view.html">Party B — Receive</a>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:2rem;">
+      <div class="card">
+        <div class="card-title">🏗️ Architecture</div>
+        <ul style="color:var(--text-muted);font-size:0.875rem;line-height:2;padding-left:1.25rem;">
+          <li><strong style="color:var(--text)">Backend</strong> — Rust + Axum REST API, SQLite database, per-IP rate limiting (120 req/min)</li>
+          <li><strong style="color:var(--text)">Frontend</strong> — Vanilla JS, <a href="https://github.com/nicktindall/node-forge" style="color:var(--primary)">node-forge</a> (RSA-OAEP), <a href="https://cryptojs.gitbook.io" style="color:var(--primary)">CryptoJS</a> (AES-256-CBC)</li>
+          <li><strong style="color:var(--text)">Keys</strong> — RSA-4096 PEM pairs (password-protected), AES-256 pre-shared key — generated via <code class="mono">setup_keys.sh</code></li>
+          <li><strong style="color:var(--text)">Format</strong> — Encrypted fields stored as <code class="mono" style="color:var(--enc-label)">%*ENCRYPTED*%(base64_ciphertext)</code></li>
+          <li><strong style="color:var(--text)">AES IV</strong> — Random 16-byte IV prepended to ciphertext before base64 encoding</li>
+          <li><strong style="color:var(--text)">RSA padding</strong> — OAEP with SHA-256 (both hash and MGF1)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab 2: Asymmetric ─────────────────────────────────────────────── -->
+  <div id="tab-asym" class="tab-panel">
+    <div class="diagram-wrap">
+      <div class="diagram-title">Asymmetric Encryption Flow — RSA-4096-OAEP-SHA256</div>
+      <svg viewBox="0 0 820 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+        <defs>
+          <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#3b82f6"/>
+          </marker>
+          <marker id="ah2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#10b981"/>
+          </marker>
+        </defs>
+
+        <!-- Browser box -->
+        <rect x="10" y="60" width="160" height="140" rx="10" fill="#0d1426" stroke="#1e3358" stroke-width="1.5"/>
+        <text x="90" y="82" text-anchor="middle" fill="#60a5fa" font-family="Inter" font-size="11" font-weight="600">BROWSER</text>
+        <text x="90" y="100" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono" font-size="9">node-forge</text>
+        <rect x="22" y="108" width="136" height="28" rx="5" fill="#05101f" stroke="#1d4ed8" stroke-width="1"/>
+        <text x="90" y="121" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono" font-size="8">%*ENCRYPTED*%</text>
+        <text x="90" y="132" text-anchor="middle" fill="#60a5fa" font-family="JetBrains Mono" font-size="8">(RSA-4096-OAEP)</text>
+        <text x="90" y="152" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Form Submit</text>
+        <text x="90" y="165" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">SecretText only</text>
+        <text x="90" y="180" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">PublicText → plain</text>
+
+        <!-- Server/API box -->
+        <rect x="310" y="60" width="160" height="140" rx="10" fill="#0d1426" stroke="#1e3358" stroke-width="1.5"/>
+        <text x="390" y="82" text-anchor="middle" fill="#60a5fa" font-family="Inter" font-size="11" font-weight="600">SERVER API</text>
+        <text x="390" y="100" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono" font-size="9">Rust + Axum</text>
+        <text x="390" y="120" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Serves public key</text>
+        <text x="390" y="135" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Stores record as-is</text>
+        <text x="390" y="150" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Serves private key</text>
+        <text x="390" y="165" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">(password-protected)</text>
+
+        <!-- Database box -->
+        <rect x="610" y="80" width="140" height="80" rx="10" fill="#0d1426" stroke="#1e3358" stroke-width="1.5"/>
+        <text x="680" y="105" text-anchor="middle" fill="#60a5fa" font-family="Inter" font-size="11" font-weight="600">DATABASE</text>
+        <text x="680" y="122" text-anchor="middle" fill="#94a3b8" font-family="JetBrains Mono" font-size="9">SQLite</text>
+        <text x="680" y="139" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono" font-size="8">%*ENCRYPTED*%</text>
+        <text x="680" y="152" text-anchor="middle" fill="#60a5fa" font-family="JetBrains Mono" font-size="8">(stored encrypted)</text>
+
+        <!-- Arrow 1: Browser fetches public key -->
+        <line x1="170" y1="100" x2="308" y2="100" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#ah)" stroke-dasharray="4,3"/>
+        <text x="240" y="93" text-anchor="middle" fill="#93c5fd" font-family="Inter" font-size="9">1. GET public key</text>
+
+        <!-- Arrow 2: Browser posts encrypted data -->
+        <line x1="170" y1="130" x2="308" y2="130" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#ah)"/>
+        <text x="240" y="123" text-anchor="middle" fill="#93c5fd" font-family="Inter" font-size="9">2. POST encrypted</text>
+
+        <!-- Arrow 3: Server stores in DB -->
+        <line x1="470" y1="120" x2="608" y2="120" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#ah)"/>
+        <text x="540" y="113" text-anchor="middle" fill="#93c5fd" font-family="Inter" font-size="9">3. Store</text>
+
+        <!-- Arrow 4: View page fetches record -->
+        <line x1="608" y1="150" x2="472" y2="175" stroke="#10b981" stroke-width="1.5" marker-end="url(#ah2)" stroke-dasharray="4,3"/>
+        <text x="555" y="173" text-anchor="middle" fill="#6ee7b7" font-family="Inter" font-size="9">4. GET record</text>
+
+        <!-- Arrow 5: Server returns encrypted record -->
+        <line x1="308" y1="175" x2="172" y2="175" stroke="#10b981" stroke-width="1.5" marker-end="url(#ah2)"/>
+        <text x="240" y="168" text-anchor="middle" fill="#6ee7b7" font-family="Inter" font-size="9">5. Encrypted record</text>
+
+        <!-- Decrypt step -->
+        <rect x="10" y="215" width="350" height="36" rx="7" fill="rgba(16,185,129,0.08)" stroke="rgba(16,185,129,0.3)" stroke-width="1"/>
+        <text x="185" y="230" text-anchor="middle" fill="#6ee7b7" font-family="Inter" font-size="9" font-weight="600">6. User enters private key password → node-forge decrypts RSA-OAEP → plaintext revealed</text>
+        <text x="185" y="244" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Private key fetched from server (GET /api/asym/private-key)</text>
+      </svg>
+    </div>
+
+    <div class="demo-links">
+      <a class="btn btn-primary" href="/asym_submit.html">🔒 Submit Encrypted Form</a>
+      <a class="btn btn-ghost" href="/asym_view.html">👁️ View &amp; Decrypt Records</a>
+    </div>
+  </div>
+
+  <!-- ── Tab 3: Symmetric ──────────────────────────────────────────────── -->
+  <div id="tab-sym" class="tab-panel">
+    <div class="diagram-wrap">
+      <div class="diagram-title">Symmetric (PGP-like) Encryption Flow — AES-256-CBC + RSA-4096-OAEP</div>
+      <svg viewBox="0 0 820 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:820px;display:block;margin:0 auto;">
+        <defs>
+          <marker id="bh" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#8b5cf6"/>
+          </marker>
+          <marker id="bh2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0,8 3,0 6" fill="#10b981"/>
+          </marker>
+        </defs>
+
+        <!-- Party A box -->
+        <rect x="10" y="30" width="170" height="200" rx="10" fill="#0d1426" stroke="#1e3358" stroke-width="1.5"/>
+        <text x="95" y="52" text-anchor="middle" fill="#a78bfa" font-family="Inter" font-size="11" font-weight="600">PARTY A (Sender)</text>
+        <text x="95" y="70" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">1. Fetch encrypted AES key</text>
+        <text x="95" y="84" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">2. Decrypt with own private key</text>
+        <text x="95" y="98" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">3. Encrypt SecretText (AES-256)</text>
+        <text x="95" y="112" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">4. Re-seal AES key for Party B</text>
+        <text x="95" y="126" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">5. POST both to server</text>
+        <rect x="20" y="140" width="150" height="22" rx="5" fill="#05101f" stroke="#7c3aed" stroke-width="1"/>
+        <text x="95" y="155" text-anchor="middle" fill="#c4b5fd" font-family="JetBrains Mono" font-size="8">AES-256-CBC (random IV)</text>
+        <rect x="20" y="168" width="150" height="22" rx="5" fill="#05101f" stroke="#1d4ed8" stroke-width="1"/>
+        <text x="95" y="183" text-anchor="middle" fill="#60a5fa" font-family="JetBrains Mono" font-size="8">RSA-4096-OAEP (AES key)</text>
+        <text x="95" y="215" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Keys from server</text>
+        <text x="95" y="228" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Password-protected</text>
+
+        <!-- Server box -->
+        <rect x="320" y="30" width="160" height="140" rx="10" fill="#0d1426" stroke="#1e3358" stroke-width="1.5"/>
+        <text x="400" y="52" text-anchor="middle" fill="#60a5fa" font-family="Inter" font-size="11" font-weight="600">SERVER / DB</text>
+        <text x="400" y="70" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Stores pre-shared AES key</text>
+        <text x="400" y="84" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">encrypted for Party A</text>
+        <text x="400" y="100" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono" font-size="8">encrypted_sym_key</text>
+        <text x="400" y="113" text-anchor="middle" fill="#60a5fa" font-family="JetBrains Mono" font-size="8">(RSA-sealed for Party B)</text>
+        <text x="400" y="128" text-anchor="middle" fill="#f59e0b" font-family="JetBrains Mono" font-size="8">encrypted_secret</text>
+        <text x="400" y="141" text-anchor="middle" fill="#60a5fa" font-family="JetBrains Mono" font-size="8">(AES-256 ciphertext)</text>
+        <text x="400" y="160" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Serves all RSA key pairs</text>
+
+        <!-- Party B box -->
+        <rect x="620" y="30" width="170" height="200" rx="10" fill="#0d1426" stroke="#1e3358" stroke-width="1.5"/>
+        <text x="705" y="52" text-anchor="middle" fill="#34d399" font-family="Inter" font-size="11" font-weight="600">PARTY B (Receiver)</text>
+        <text x="705" y="70" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">1. Fetch record from DB</text>
+        <text x="705" y="84" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">2. Decrypt AES key with own</text>
+        <text x="705" y="97" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">   RSA private key</text>
+        <text x="705" y="111" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">3. Decrypt message with AES key</text>
+        <text x="705" y="125" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">4. Edit &amp; re-encrypt with AES</text>
+        <text x="705" y="139" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">5. PUT updated record</text>
+        <rect x="630" y="152" width="150" height="22" rx="5" fill="rgba(16,185,129,0.1)" stroke="rgba(16,185,129,0.4)" stroke-width="1"/>
+        <text x="705" y="167" text-anchor="middle" fill="#6ee7b7" font-family="JetBrains Mono" font-size="8">Plaintext revealed ✓</text>
+        <text x="705" y="203" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">Refresh to get updates</text>
+        <text x="705" y="218" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">from Party A</text>
+
+        <!-- Arrows A → Server -->
+        <line x1="180" y1="80" x2="318" y2="80" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#bh)"/>
+        <text x="250" y="73" text-anchor="middle" fill="#c4b5fd" font-family="Inter" font-size="9">GET sym-key-for-A</text>
+
+        <line x1="180" y1="115" x2="318" y2="115" stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#bh)"/>
+        <text x="250" y="108" text-anchor="middle" fill="#c4b5fd" font-family="Inter" font-size="9">POST encrypted record</text>
+
+        <!-- Arrows Server → Party B -->
+        <line x1="480" y1="100" x2="618" y2="100" stroke="#10b981" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#bh2)"/>
+        <text x="550" y="93" text-anchor="middle" fill="#6ee7b7" font-family="Inter" font-size="9">GET record</text>
+
+        <line x1="618" y1="135" x2="480" y2="135" stroke="#10b981" stroke-width="1.5" marker-end="url(#bh2)"/>
+        <text x="550" y="128" text-anchor="middle" fill="#6ee7b7" font-family="Inter" font-size="9">PUT updated</text>
+
+        <!-- Footer note -->
+        <rect x="10" y="250" width="780" height="38" rx="7" fill="rgba(139,92,246,0.06)" stroke="rgba(139,92,246,0.25)" stroke-width="1"/>
+        <text x="400" y="264" text-anchor="middle" fill="#c4b5fd" font-family="Inter" font-size="9" font-weight="600">Key insight: The AES-256 key never travels in plaintext. It is always RSA-encrypted for the intended recipient.</text>
+        <text x="400" y="280" text-anchor="middle" fill="#94a3b8" font-family="Inter" font-size="9">The same AES key (from server) is used, but re-sealed per transmission. IV is random per encryption.</text>
+      </svg>
+    </div>
+
+    <div class="demo-links">
+      <a class="btn btn-secondary" href="/sym_submit.html">📤 Party A — Send Message</a>
+      <a class="btn btn-ghost" href="/sym_view.html">📥 Party B — Receive &amp; Decrypt</a>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const names = ['about','asym','sym'];
+    b.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+</script>
+</body>
+</html>

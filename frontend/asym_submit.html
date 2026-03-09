@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Asymmetric Submit — CryptoJS PoC</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/"><span class="lock-icon">🔐</span> CryptoJS PoC</a>
+  <div class="nav-links">
+    <a class="nav-link" href="/">Home</a>
+    <a class="nav-link active" href="/asym_submit.html">Asym Submit</a>
+    <a class="nav-link" href="/asym_view.html">Asym View</a>
+    <a class="nav-link" href="/sym_submit.html">Sym Submit</a>
+    <a class="nav-link" href="/sym_view.html">Sym View</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <div class="page-title">🔑 Asymmetric Encryption — Submit</div>
+    <div class="page-subtitle">SecretText is encrypted with the server's RSA-4096 public key before being sent</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;">
+    <!-- Form -->
+    <div class="card">
+      <div class="card-title">📝 New Record</div>
+
+      <div class="info-block">
+        <strong>How it works:</strong> When you submit, the browser fetches the server's
+        RSA-4096 public key, encrypts <em>SecretText</em> using RSA-OAEP-SHA256 (via node-forge),
+        and stores the result as <code class="mono">%*ENCRYPTED*%(base64…)</code>.
+        PublicText and Serial are stored in plain text.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Serial Number (auto-generated)</label>
+        <input id="serial" class="form-input mono" readonly/>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Public Text <span style="color:var(--success);font-size:0.7rem;">(not encrypted)</span></label>
+        <input id="publicText" class="form-input" placeholder="Enter public information…" maxlength="255"/>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Secret Text <span style="color:var(--danger);font-size:0.7rem;">(RSA-4096 encrypted)</span></label>
+        <input id="secretText" class="form-input" placeholder="Enter sensitive data… (max 400 chars)" maxlength="400"/>
+        <div class="form-hint">Max 400 characters (RSA-4096-OAEP-SHA256 limit is ~446 bytes)</div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="handleSubmit()">
+          🔒 Encrypt &amp; Submit
+        </button>
+        <button class="btn btn-ghost" onclick="generateSerial()">
+          🔄 New Serial
+        </button>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <!-- Preview -->
+    <div>
+      <div class="card">
+        <div class="card-title">👁️ Encryption Preview</div>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+          The value below shows how the data will be stored in the database.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Serial (plain)</label>
+          <div class="enc-value" id="prev-serial" style="color:var(--text-muted);">—</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">PublicText (plain)</label>
+          <div class="enc-value" id="prev-public" style="color:var(--text-muted);">—</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">SecretText (as stored in DB)</label>
+          <div class="enc-value" id="prev-secret">
+            <span style="color:var(--text-muted);">Waiting for encryption…</span>
+          </div>
+          <div class="enc-hint">Format: <span class="enc-label">%*ENCRYPTED*%</span>(base64_RSA_ciphertext)</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;">
+        <div class="card-title">🔬 Technical Details</div>
+        <table style="width:100%;font-size:0.8rem;border-collapse:collapse;">
+          <tr>
+            <td style="color:var(--text-muted);padding:0.3rem 0;width:40%;">Algorithm</td>
+            <td class="mono" style="color:var(--enc-text);">RSA-OAEP</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);padding:0.3rem 0;">Key size</td>
+            <td class="mono" style="color:var(--enc-text);">4096 bits</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);padding:0.3rem 0;">Hash (OAEP)</td>
+            <td class="mono" style="color:var(--enc-text);">SHA-256</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);padding:0.3rem 0;">MGF1 hash</td>
+            <td class="mono" style="color:var(--enc-text);">SHA-256</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);padding:0.3rem 0;">Library</td>
+            <td class="mono" style="color:var(--enc-text);">node-forge 1.3</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);padding:0.3rem 0;">Public key</td>
+            <td class="mono" style="color:var(--enc-text);">GET /api/asym/public-key</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
+<script>
+/* ── Utilities ─────────────────────────────────────────────────────────── */
+function formatEncrypted(base64) {
+  return `%*ENCRYPTED*%(${base64})`;
+}
+
+function setStatus(msg, type = 'info') {
+  const el = document.getElementById('status');
+  el.className = `status show status-${type}`;
+  const icons = { info: '⟳', success: '✓', error: '✗', loading: '' };
+  const spinner = type === 'loading' ? '<span class="spinner"></span>' : '';
+  el.innerHTML = `${spinner}${icons[type] || ''} ${msg}`;
+}
+
+function generateSerial() {
+  const sn = 'SN-' + Math.floor(Math.random() * 9000000 + 1000000);
+  document.getElementById('serial').value = sn;
+  document.getElementById('prev-serial').textContent = sn;
+}
+
+/* ── Input sync ─────────────────────────────────────────────────────────── */
+document.getElementById('publicText').addEventListener('input', function() {
+  document.getElementById('prev-public').textContent = this.value || '—';
+});
+
+/* ── Main submit handler ─────────────────────────────────────────────────── */
+async function handleSubmit() {
+  const serial = document.getElementById('serial').value.trim();
+  const publicText = document.getElementById('publicText').value.trim();
+  const secretText = document.getElementById('secretText').value.trim();
+
+  if (!serial || !publicText || !secretText) {
+    setStatus('All fields are required.', 'error');
+    return;
+  }
+
+  try {
+    // 1. Fetch public key
+    setStatus('Fetching server RSA-4096 public key…', 'loading');
+    const pkRes = await fetch('/api/asym/public-key');
+    if (!pkRes.ok) throw new Error('Could not fetch public key — run setup_keys.sh first');
+    const pubKeyPem = await pkRes.text();
+
+    // 2. Parse public key
+    setStatus('Parsing RSA-4096 public key…', 'loading');
+    const publicKey = forge.pki.publicKeyFromPem(pubKeyPem);
+
+    // 3. Encrypt
+    setStatus('Encrypting with RSA-4096-OAEP-SHA256…', 'loading');
+    // Slight delay so the loading state renders
+    await new Promise(r => setTimeout(r, 30));
+
+    const encrypted = publicKey.encrypt(
+      forge.util.encodeUtf8(secretText),
+      'RSA-OAEP',
+      { md: forge.md.sha256.create(), mgf1: { md: forge.md.sha256.create() } }
+    );
+    const base64 = forge.util.encode64(encrypted);
+    const encryptedField = formatEncrypted(base64);
+
+    // 4. Update preview
+    document.getElementById('prev-secret').innerHTML =
+      `<span class="enc-label">%*ENCRYPTED*%</span><span style="color:var(--enc-text);">(${base64.substring(0,40)}…)</span>`;
+
+    // 5. POST to API
+    setStatus('Submitting to server…', 'loading');
+    const res = await fetch('/api/asym/records', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serial,
+        public_text: publicText,
+        secret_text: encryptedField
+      })
+    });
+
+    if (!res.ok) throw new Error(`Server error: ${await res.text()}`);
+    const { id } = await res.json();
+
+    setStatus(`Record saved! ID: ${id.substring(0,8)}… — <a href="/asym_view.html" style="color:inherit;text-decoration:underline;">View records →</a>`, 'success');
+
+    // Reset form
+    document.getElementById('publicText').value = '';
+    document.getElementById('secretText').value = '';
+    document.getElementById('prev-public').textContent = '—';
+    document.getElementById('prev-secret').innerHTML = '<span style="color:var(--text-muted);">Waiting for encryption…</span>';
+    generateSerial();
+
+  } catch (err) {
+    setStatus(err.message, 'error');
+    console.error(err);
+  }
+}
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+generateSerial();
+</script>
+</body>
+</html>

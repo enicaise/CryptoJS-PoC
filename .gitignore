@@ -1,0 +1,18 @@
+# Rust build artifacts
+backend/target/
+backend/Cargo.lock
+
+# Database (generated at runtime)
+backend/poc.db
+
+# Generated key files (contain private keys — never commit)
+keys/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

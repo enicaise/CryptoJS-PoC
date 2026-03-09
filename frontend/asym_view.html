@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Asymmetric View — CryptoJS PoC</title>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/"><span class="lock-icon">🔐</span> CryptoJS PoC</a>
+  <div class="nav-links">
+    <a class="nav-link" href="/">Home</a>
+    <a class="nav-link" href="/asym_submit.html">Asym Submit</a>
+    <a class="nav-link active" href="/asym_view.html">Asym View</a>
+    <a class="nav-link" href="/sym_submit.html">Sym Submit</a>
+    <a class="nav-link" href="/sym_view.html">Sym View</a>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <div class="page-title">👁️ Asymmetric Encryption — View &amp; Decrypt</div>
+    <div class="page-subtitle">Select a record to inspect it, then decrypt SecretText using the server's private key</div>
+  </div>
+
+  <div class="split-pane">
+    <!-- Left: record list -->
+    <div>
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;">
+          <span>📋 Records</span>
+          <button class="btn btn-ghost btn-sm" onclick="loadRecords()">🔄 Refresh</button>
+        </div>
+        <div id="record-list">
+          <div class="empty-state"><div class="empty-icon">📭</div>Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: detail pane -->
+    <div id="detail-pane">
+      <div class="card">
+        <div style="text-align:center;padding:3rem 1rem;color:var(--text-muted);">
+          <div style="font-size:3rem;margin-bottom:1rem;">←</div>
+          Select a record to view its details
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
+<script>
+/* ── State ──────────────────────────────────────────────────────────────── */
+let records = [];
+let selectedId = null;
+
+/* ── Utilities ──────────────────────────────────────────────────────────── */
+function isEncrypted(val) {
+  return typeof val === 'string' && /^%\*ENCRYPTED\*%\(.+\)$/.test(val.trim());
+}
+
+function extractBase64(val) {
+  const m = val.match(/^%\*ENCRYPTED\*%\((.+)\)$/);
+  return m ? m[1] : null;
+}
+
+function shortDate(iso) {
+  return new Date(iso).toLocaleString();
+}
+
+/* ── Load records ────────────────────────────────────────────────────────── */
+async function loadRecords() {
+  const list = document.getElementById('record-list');
+  list.innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto 1rem;width:24px;height:24px;border-width:3px;"></div>Loading…</div>';
+
+  try {
+    const res = await fetch('/api/asym/records');
+    records = await res.json();
+
+    if (records.length === 0) {
+      list.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">📭</div>
+        No records yet.<br>
+        <a href="/asym_submit.html" style="color:var(--primary);margin-top:0.5rem;display:inline-block;">Submit a record →</a>
+      </div>`;
+      return;
+    }
+
+    list.innerHTML = '<div class="record-list">' +
+      records.map(r => `
+        <div class="record-item ${r.id === selectedId ? 'selected' : ''}"
+             onclick="selectRecord('${r.id}')">
+          <div class="record-item-serial">${r.serial}</div>
+          <div class="record-item-meta">${r.public_text.substring(0,40)}${r.public_text.length>40?'…':''}</div>
+          <div class="record-item-meta" style="display:flex;gap:0.5rem;margin-top:0.3rem;">
+            ${isEncrypted(r.secret_text)
+              ? '<span class="badge badge-enc">🔒 encrypted</span>'
+              : '<span class="badge badge-plain">📄 plain</span>'}
+            <span>${shortDate(r.created_at)}</span>
+          </div>
+        </div>
+      `).join('') +
+    '</div>';
+
+    // Re-select if one was selected
+    if (selectedId) {
+      const r = records.find(x => x.id === selectedId);
+      if (r) renderDetail(r);
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="empty-state" style="color:var(--danger);">Error: ${e.message}</div>`;
+  }
+}
+
+/* ── Select record ───────────────────────────────────────────────────────── */
+function selectRecord(id) {
+  selectedId = id;
+  const r = records.find(x => x.id === id);
+  if (r) renderDetail(r);
+  // Update selected state
+  document.querySelectorAll('.record-item').forEach(el => {
+    el.classList.toggle('selected', el.onclick.toString().includes(`'${id}'`));
+  });
+}
+
+/* ── Render detail pane ─────────────────────────────────────────────────── */
+function renderDetail(r) {
+  const enc = isEncrypted(r.secret_text);
+  document.getElementById('detail-pane').innerHTML = `
+    <div class="card">
+      <div class="card-title">🔍 Record Detail</div>
+
+      <div class="form-group">
+        <label class="form-label">ID</label>
+        <div class="enc-value" style="color:var(--text-muted);font-size:0.7rem;">${r.id}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Serial</label>
+        <div class="enc-value" style="color:var(--primary);">${r.serial}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Public Text <span class="badge badge-plain" style="margin-left:0.5rem;">plain</span></label>
+        <div class="enc-value" style="color:var(--text);">${escHtml(r.public_text)}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">
+          Secret Text
+          ${enc
+            ? '<span class="badge badge-enc" style="margin-left:0.5rem;">🔒 encrypted</span>'
+            : '<span class="badge badge-plain" style="margin-left:0.5rem;">plain</span>'}
+        </label>
+        <div class="enc-value" id="enc-field">${renderEncValue(r.secret_text)}</div>
+        ${enc ? '<div class="enc-hint">Contains RSA-4096-OAEP-SHA256 ciphertext (base64)</div>' : ''}
+      </div>
+
+      ${enc ? `
+      <hr class="divider"/>
+      <div class="card-title">🔓 Decrypt</div>
+      <div class="info-block">
+        The private key is fetched from the server (password-protected PEM).
+        Enter the key password below to decrypt SecretText in your browser using node-forge.
+      </div>
+      <div class="form-group">
+        <label class="form-label">Private Key Password</label>
+        <input id="privkey-pass" class="form-input" type="password"
+               placeholder="Enter password…" value="ServerKey@PoC2024"/>
+        <div class="form-hint mono" style="margin-top:0.4rem;">Default PoC password: ServerKey@PoC2024</div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="decryptSecret('${r.id}')">🔓 Decrypt</button>
+      </div>
+      <div id="dec-status" class="status"></div>
+      <div id="dec-result" style="display:none;" class="decrypted-section">
+        <div class="section-label">✓ Decrypted Plaintext</div>
+        <div id="dec-text" class="enc-value" style="color:var(--success);border-color:rgba(16,185,129,0.3);background:rgba(16,185,129,0.05);"></div>
+      </div>
+      ` : ''}
+
+      <hr class="divider"/>
+      <div style="color:var(--text-muted);font-size:0.75rem;">
+        Created: ${shortDate(r.created_at)}
+      </div>
+    </div>
+  `;
+}
+
+function renderEncValue(val) {
+  if (!isEncrypted(val)) return escHtml(val);
+  const b64 = extractBase64(val);
+  const preview = b64.substring(0, 48);
+  return `<span class="enc-label">%*ENCRYPTED*%</span><span style="color:var(--enc-text);">(${preview}…)</span>`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Decrypt ─────────────────────────────────────────────────────────────── */
+async function decryptSecret(id) {
+  const r = records.find(x => x.id === id);
+  if (!r) return;
+  const password = document.getElementById('privkey-pass').value;
+  if (!password) { decStatus('Password required', 'error'); return; }
+
+  try {
+    decStatus('Fetching private key from server…', 'loading');
+    const pkRes = await fetch('/api/asym/private-key');
+    if (!pkRes.ok) throw new Error('Could not fetch private key');
+    const privKeyPem = await pkRes.text();
+
+    decStatus('Decrypting RSA-4096 private key with password…', 'loading');
+    await new Promise(r => setTimeout(r, 30));
+    const privateKey = forge.pki.decryptRsaPrivateKey(privKeyPem, password);
+    if (!privateKey) throw new Error('Invalid password — could not decrypt private key');
+
+    decStatus('Decrypting SecretText with RSA-OAEP-SHA256…', 'loading');
+    await new Promise(r => setTimeout(r, 30));
+    const b64 = extractBase64(r.secret_text);
+    const cipherBytes = forge.util.decode64(b64);
+    const decrypted = privateKey.decrypt(cipherBytes, 'RSA-OAEP', {
+      md: forge.md.sha256.create(),
+      mgf1: { md: forge.md.sha256.create() }
+    });
+    const plaintext = forge.util.decodeUtf8(decrypted);
+
+    decStatus('Decryption successful!', 'success');
+    document.getElementById('dec-result').style.display = 'block';
+    document.getElementById('dec-text').textContent = plaintext;
+
+  } catch (err) {
+    decStatus(err.message, 'error');
+    console.error(err);
+  }
+}
+
+function decStatus(msg, type) {
+  const el = document.getElementById('dec-status');
+  el.className = `status show status-${type}`;
+  const spinner = type === 'loading' ? '<span class="spinner"></span> ' : '';
+  el.innerHTML = `${spinner}${msg}`;
+}
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+loadRecords();
+</script>
+</body>
+</html>
